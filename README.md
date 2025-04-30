@@ -11,3 +11,22 @@ GoGameOfLife --Conway's Game Of Life in Go.
 
 ![gif](https://github.com/TKTHdev/GoGameOfLife/blob/master/gameoflife.gif)
 
+## 🛠 Installation & Running
+
+### 1. Clone this repository
+
+```bash
+git clone https://github.com/TKTHdev/GoGameOfLife.git
+cd GoGameOfLife
+```
+
+### 2. Install dependencies
+This project uses Pixel, a 2D game library for Go. To install dependencies:
+```bash
+go mod tidy
+```
+
+## 3. Run
+```bash
+go run game.go
+```
