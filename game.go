@@ -16,11 +16,11 @@ import (
 )
 
 const (
-	width     = 1024
-	height    = 768
-	cellSize  = 10
-	rows      = height / cellSize
-	cols      = width / cellSize
+	width    = 1024
+	height   = 768
+	cellSize = 10
+	rows     = height / cellSize
+	cols     = width / cellSize
 )
 
 var (
@@ -43,18 +43,36 @@ func initGrid() {
 
 func liveNeighbors(y, x int) int {
 	count := 0
-	for dy := -1; dy <= 1; dy++ {
-		for dx := -1; dx <= 1; dx++ {
-			if dy == 0 && dx == 0 {
-				continue
-			}
-			ny := (y + dy + rows) % rows
-			nx := (x + dx + cols) % cols
-			if grid[ny][nx] {
-				count++
-			}
-		}
+	// Pre-calculate wrapped coordinates
+	ny := (y + rows) % rows
+	nx := (x + cols) % cols
+
+	// Check all 8 neighbors
+	if grid[(ny-1+rows)%rows][(nx-1+cols)%cols] {
+		count++
 	}
+	if grid[(ny-1+rows)%rows][nx] {
+		count++
+	}
+	if grid[(ny-1+rows)%rows][(nx+1)%cols] {
+		count++
+	}
+	if grid[ny][(nx-1+cols)%cols] {
+		count++
+	}
+	if grid[ny][(nx+1)%cols] {
+		count++
+	}
+	if grid[(ny+1)%rows][(nx-1+cols)%cols] {
+		count++
+	}
+	if grid[(ny+1)%rows][nx] {
+		count++
+	}
+	if grid[(ny+1)%rows][(nx+1)%cols] {
+		count++
+	}
+
 	return count
 }
 
@@ -90,18 +108,55 @@ func updateGrid() {
 
 func drawGrid(win *pixelgl.Window) {
 	win.Clear(colornames.Black)
-	imd := imdraw.New(nil)
-	imd.Color = color.White
-	for y := 0; y < rows; y++ {
-		for x := 0; x < cols; x++ {
-			if grid[y][x] {
-				imd.Push(pixel.V(float64(x*cellSize), float64(y*cellSize)))
-				imd.Push(pixel.V(float64((x+1)*cellSize), float64((y+1)*cellSize)))
-				imd.Rectangle(0)
-			}
+
+	var wg sync.WaitGroup
+	numWorkers := 8
+	chunkSize := rows / numWorkers
+
+	// Create a channel to collect all imdraw objects
+	imdChan := make(chan *imdraw.IMDraw, numWorkers)
+
+	for i := 0; i < numWorkers; i++ {
+		startY := i * chunkSize
+		endY := startY + chunkSize
+		if i == numWorkers-1 {
+			endY = rows
 		}
+		wg.Add(1)
+		go func(startY, endY int) {
+			defer wg.Done()
+			// Create a separate imdraw object for each worker
+			workerImd := imdraw.New(nil)
+			workerImd.Color = color.White
+
+			// Batch the drawing operations
+			for y := startY; y < endY; y++ {
+				for x := 0; x < cols; x++ {
+					if grid[y][x] {
+						workerImd.Push(pixel.V(float64(x*cellSize), float64(y*cellSize)))
+						workerImd.Push(pixel.V(float64((x+1)*cellSize), float64((y+1)*cellSize)))
+						workerImd.Rectangle(0)
+					}
+				}
+			}
+			imdChan <- workerImd
+		}(startY, endY)
 	}
-	imd.Draw(win)
+
+	// Wait for all workers to complete
+	wg.Wait()
+	close(imdChan)
+
+	// Combine all imdraw objects
+	finalImd := imdraw.New(nil)
+	finalImd.Color = color.White
+	for workerImd := range imdChan {
+		// Draw each worker's imdraw object to the final one
+		workerImd.Draw(finalImd)
+	}
+
+	// Draw the final result
+	finalImd.Draw(win)
 }
 
 func drawFrameDelay(txt *text.Text, win *pixelgl.Window) {
